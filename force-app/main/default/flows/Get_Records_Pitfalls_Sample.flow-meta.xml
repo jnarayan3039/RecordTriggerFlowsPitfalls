@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <actionCalls>
+        <name>Check_Candidate_Eligibility</name>
+        <label>Check Candidate Eligibility</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <actionName>CandidateEligibilityAction</actionName>
+        <actionType>apex</actionType>
+        <connector>
+            <targetReference>isCandidate_Eligible2</targetReference>
+        </connector>
+        <flowTransactionModel>CurrentTransaction</flowTransactionModel>
+        <inputParameters>
+            <name>candidateId</name>
+            <value>
+                <elementReference>$Record.Id</elementReference>
+            </value>
+        </inputParameters>
+        <nameSegment>CandidateEligibilityAction</nameSegment>
+        <offset>0</offset>
+        <storeOutputAutomatically>true</storeOutputAutomatically>
+    </actionCalls>
+    <actionCalls>
+        <name>Send_Email_to_Recruiter</name>
+        <label>Send Email to Recruiter</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <actionName>emailSimple</actionName>
+        <actionType>emailSimple</actionType>
+        <connector>
+            <targetReference>Iterate_Job_Applications</targetReference>
+        </connector>
+        <flowTransactionModel>CurrentTransaction</flowTransactionModel>
+        <inputParameters>
+            <name>emailAddresses</name>
+        </inputParameters>
+        <inputParameters>
+            <name>senderType</name>
+            <value>
+                <stringValue>CurrentUser</stringValue>
+            </value>
+        </inputParameters>
+        <inputParameters>
+            <name>useEmailTemplate</name>
+            <value>
+                <stringValue>True</stringValue>
+            </value>
+        </inputParameters>
+        <inputParameters>
+            <name>emailTemplateId</name>
+            <value>
+                <stringValue>00Xaj00000LsxNBEAZ</stringValue>
+            </value>
+        </inputParameters>
+        <inputParameters>
+            <name>recipientId</name>
+            <value>
+                <elementReference>Iterate_Job_Applications.Recruiter__c</elementReference>
+            </value>
+        </inputParameters>
+        <nameSegment>emailSimple</nameSegment>
+        <offset>0</offset>
+        <versionString>1.0.1</versionString>
+    </actionCalls>
+    <apiVersion>64.0</apiVersion>
+    <areMetricsLoggedToDataCloud>false</areMetricsLoggedToDataCloud>
+    <assignments>
+        <name>Assign_Recruiter_from_Candidate</name>
+        <label>Assign Recruiter from Candidate</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <assignmentItems>
+            <assignToReference>userIdList</assignToReference>
+            <operator>Add</operator>
+            <value>
+                <elementReference>Iterate_Job_Applications.Candidate__r.Recruiter_Assignment__r.Id</elementReference>
+            </value>
+        </assignmentItems>
+        <connector>
+            <targetReference>Update_Status_to_Closed</targetReference>
+        </connector>
+    </assignments>
+    <customErrors>
+        <name>Candidate_is_Not_Eligible</name>
+        <label>Candidate is Not Eligible</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Status_Changes</targetReference>
+        </connector>
+        <customErrorMessages>
+            <errorMessage>Candidate is not Eligible to Apply</errorMessage>
+            <isFieldError>false</isFieldError>
+        </customErrorMessages>
+    </customErrors>
+    <decisions>
+        <name>isCandidate_Eligible2</name>
+        <label>isCandidate Eligible</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <defaultConnector>
+            <targetReference>Candidate_is_Not_Eligible</targetReference>
+        </defaultConnector>
+        <defaultConnectorLabel>Default Outcome</defaultConnectorLabel>
+        <rules>
+            <name>isCandidateEligible1</name>
+            <conditionLogic>and</conditionLogic>
+            <conditions>
+                <leftValueReference>Check_Candidate_Eligibility.isEligible</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <booleanValue>true</booleanValue>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Status_Changes</targetReference>
+            </connector>
+            <label>isCandidateEligible</label>
+        </rules>
+    </decisions>
+    <decisions>
+        <name>Status_Changes</name>
+        <label>Status Changes</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <defaultConnectorLabel>Default Outcome</defaultConnectorLabel>
+        <rules>
+            <name>When_Rejected</name>
+            <conditionLogic>and</conditionLogic>
+            <conditions>
+                <leftValueReference>$Record.Status__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>Rejected</stringValue>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Get_Job_Applications</targetReference>
+            </connector>
+            <label>When Rejected</label>
+        </rules>
+    </decisions>
+    <environments>Default</environments>
+    <formulas>
+        <name>isCandidateEligible</name>
+        <dataType>Boolean</dataType>
+        <expression>AND(
+  /* Minimum experience */
+  {!$Record.Years_of_Experience__c} &gt;= 2,
+
+  /* Required certification present (text field or picklist text) */
+  OR(
+    CONTAINS({!$Record.Primary_Certification__c}, &quot;Salesforce Administrator&quot;),
+    INCLUDES($Record.Certifications__c, &quot;Salesforce Administrator&quot;)
+  ),
+
+  /* Valid email (regex) */
+  REGEX(
+    {!$Record.Email__c},
+    &quot;^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$&quot;
+  ),
+
+  /* Optional: role-based exceptions with nested logic (adds cost) */
+  OR(
+    /* Senior roles demand 4+ yrs */
+    AND(
+      ISPICKVAL({!$Record.Target_Role__c}, &quot;Senior&quot;),
+      {!$Record.Years_of_Experience__c}&gt;= 4
+    ),
+    /* Non-senior roles keep base rule */
+    NOT(ISPICKVAL({!$Record.Target_Role__c}, &quot;Senior&quot;))
+  )
+)</expression>
+    </formulas>
+    <interviewLabel>Get Records Pitfalls Sample {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Get Records Pitfalls Sample</label>
+    <loops>
+        <name>Iterate_Job_Applications</name>
+        <label>Iterate Job Applications</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <collectionReference>Get_Job_Applications</collectionReference>
+        <iterationOrder>Asc</iterationOrder>
+        <nextValueConnector>
+            <targetReference>Assign_Recruiter_from_Candidate</targetReference>
+        </nextValueConnector>
+    </loops>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>CanvasMode</name>
+        <value>
+            <stringValue>AUTO_LAYOUT_CANVAS</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>OriginBuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
+    <recordLookups>
+        <name>Get_Job_Applications</name>
+        <label>Get Job Applications</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <assignNullValuesIfNoRecordsFound>false</assignNullValuesIfNoRecordsFound>
+        <connector>
+            <targetReference>Iterate_Job_Applications</targetReference>
+        </connector>
+        <getFirstRecordOnly>false</getFirstRecordOnly>
+        <object>Job_Application__c</object>
+        <storeOutputAutomatically>true</storeOutputAutomatically>
+    </recordLookups>
+    <recordUpdates>
+        <name>Update_Status_to_Closed</name>
+        <label>Update Status to Closed</label>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Send_Email_to_Recruiter</targetReference>
+        </connector>
+        <inputAssignments>
+            <field>Status__c</field>
+            <value>
+                <stringValue>Cancelled</stringValue>
+            </value>
+        </inputAssignments>
+        <inputReference>$Record.Job_Applications__r</inputReference>
+    </recordUpdates>
+    <start>
+        <locationX>0</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Check_Candidate_Eligibility</targetReference>
+        </connector>
+        <object>Candidate__c</object>
+        <recordTriggerType>CreateAndUpdate</recordTriggerType>
+        <triggerType>RecordAfterSave</triggerType>
+    </start>
+    <status>Obsolete</status>
+    <variables>
+        <name>userIdList</name>
+        <dataType>String</dataType>
+        <isCollection>true</isCollection>
+        <isInput>false</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+</Flow>
